@@ -8,14 +8,16 @@ on:
 jobs:
   mirror:
     runs-on: ubuntu-latest
+
     steps:
       - name: Mirror repository
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          git clone --mirror https://gitverse.ru/Zavalar/twitch_chat_parser.git mirror
+          git clone --bare https://gitverse.ru/Zavalar/twitch_chat_parser.git mirror
           cd mirror
 
           git remote set-url --push origin https://${GH_TOKEN}@github.com/Ishafel/twitch_chat_parser.git
+
           git push --force --all
           git push --force --tags
