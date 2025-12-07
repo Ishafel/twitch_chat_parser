@@ -2,7 +2,7 @@ name: Mirror from GitVerse
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # каждые 30 минут
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -15,4 +15,6 @@ jobs:
         run: |
           git clone --mirror https://gitverse.ru/Zavalar/twitch_chat_parser.git mirror
           cd mirror
-          git push --mirror https://${GH_TOKEN}@github.com/Ishafel/twitch_chat_parser.git
+
+          git remote set-url --push origin https://${GH_TOKEN}@github.com/Ishafel/twitch_chat_parser.git
+          git push --mirror
