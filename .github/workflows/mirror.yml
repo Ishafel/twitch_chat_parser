@@ -17,4 +17,5 @@ jobs:
           cd mirror
 
           git remote set-url --push origin https://${GH_TOKEN}@github.com/Ishafel/twitch_chat_parser.git
-          git push --mirror
+          git push --force --all
+          git push --force --tags
