@@ -13,6 +13,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          git clone --mirror https://gitverse.ru/ТВОЙ_РЕПОЗИТОРИЙ.git mirror
+          git clone --mirror https://gitverse.ru/Zavalar/twitch_chat_parser.git mirror
           cd mirror
           git push --mirror https://${GH_TOKEN}@github.com/USER/REPO.git
