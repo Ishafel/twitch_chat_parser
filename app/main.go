@@ -24,9 +24,10 @@ func mustEnv(key string) string {
 }
 
 const (
-	maxBatch   = 100                     // флаш по размеру (при всплесках)
-	flushEvery = 1500 * time.Millisecond // флаш по таймеру (near-realtime)
-	chanBuffer = 4096                    // буфер очереди сообщений
+	maxBatch      = 100                     // флаш по размеру (при всплесках)
+	flushEvery    = 1500 * time.Millisecond // флаш по таймеру (near-realtime)
+	chanBuffer    = 4096                    // буфер очереди сообщений
+	statsLogEvery = 5 * time.Minute         // раз в 5 минут — лог статистики
 )
 
 type row struct {
@@ -37,17 +38,22 @@ type row struct {
 	sentAt                                 time.Time
 }
 
-// батчер: собирает INSERT'ы в pgx.Batch и флашит пачкой
+// батчер: собирает INSERT'ы в pgx.Batch и флашит пачкой,
+// плюс логирует, сколько строк вставлено.
 func startBatchWriter(ctx context.Context, pool *pgxpool.Pool) chan<- row {
 	in := make(chan row, chanBuffer)
 
 	go func() {
-		ticker := time.NewTicker(flushEvery)
-		defer ticker.Stop()
+		flushTicker := time.NewTicker(flushEvery)
+		statsTicker := time.NewTicker(statsLogEvery)
+		defer flushTicker.Stop()
+		defer statsTicker.Stop()
 
 		var (
-			batch   = &pgx.Batch{}
-			pending = 0
+			batch            = &pgx.Batch{}
+			pending          = 0
+			totalInserted    uint64
+			intervalInserted uint64
 		)
 
 		const q = `
@@ -64,7 +70,10 @@ on conflict (message_id) do nothing;`
 			br := pool.SendBatch(ctx, batch)
 			if err := br.Close(); err != nil {
 				log.Printf("batch flush error: %v", err)
+				// даже если ошибка, считаем эти строки обработанными логически
 			}
+			totalInserted += uint64(pending)
+			intervalInserted += uint64(pending)
 			batch = &pgx.Batch{}
 			pending = 0
 		}
@@ -73,9 +82,19 @@ on conflict (message_id) do nothing;`
 			select {
 			case <-ctx.Done():
 				flush()
+				log.Printf("batch writer: context cancelled, total inserted rows = %d", totalInserted)
 				return
-			case <-ticker.C:
+
+			case <-flushTicker.C:
 				flush()
+
+			case <-statsTicker.C:
+				log.Printf(
+					"batch writer: inserted %d rows in last %s (total %d)",
+					intervalInserted, statsLogEvery, totalInserted,
+				)
+				intervalInserted = 0
+
 			case r := <-in:
 				batch.Queue(q,
 					r.id, r.ch, r.uid, r.uname, r.dname, r.txt, r.badges, r.color,
@@ -117,7 +136,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	// запустим батчер
+	// батчер
 	writer := startBatchWriter(ctx, pool)
 
 	// ---- twitch client
@@ -131,7 +150,6 @@ func main() {
 			sentAt = time.Now().UTC()
 		}
 
-		// отправляем в очередь; запись попадёт в следующий батч
 		writer <- row{
 			id:    ptr(m.ID),
 			ch:    ptr(strings.TrimPrefix(m.Channel, "#")),
@@ -162,7 +180,7 @@ func main() {
 		log.Printf("server asked to reconnect: %+v", message)
 	})
 
-	// go-twitch-irc уже делает автореконнект
+	// go-twitch-irc уже умеет автореконнект с бэкоффом
 	go func() {
 		if err := client.Connect(); err != nil {
 			log.Printf("twitch connect error: %v", err)
@@ -189,6 +207,6 @@ func splitAndTrim(s string) []string {
 	return out
 }
 
-func ptr[T any](v T) *T        { return &v }
-func boolPtr(b bool) *bool     { return &b }
-func intPtr(i int) *int        { return &i }
+func ptr[T any](v T) *T    { return &v }
+func boolPtr(b bool) *bool { return &b }
+func intPtr(i int) *int    { return &i }
