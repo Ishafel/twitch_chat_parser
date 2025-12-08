@@ -23,11 +23,13 @@ func mustEnv(key string) string {
 	return v
 }
 
+// Параметры батчинга/логирования
 const (
-	maxBatch      = 100                     // флаш по размеру (при всплесках)
+	maxBatch      = 100                     // сколько сообщений копить перед принудительным флашем
 	flushEvery    = 1500 * time.Millisecond // флаш по таймеру (near-realtime)
 	chanBuffer    = 4096                    // буфер очереди сообщений
-	statsLogEvery = 5 * time.Minute         // раз в 5 минут — лог статистики
+	statsLogEvery = 5 * time.Minute         // как часто логировать статистику
+	flushTimeout  = 5 * time.Second         // максимальное время на один флаш в БД
 )
 
 type row struct {
@@ -39,7 +41,7 @@ type row struct {
 }
 
 // батчер: собирает INSERT'ы в pgx.Batch и флашит пачкой,
-// плюс логирует, сколько строк вставлено.
+// плюс логирует статистику по вставкам.
 func startBatchWriter(ctx context.Context, pool *pgxpool.Pool) chan<- row {
 	in := make(chan row, chanBuffer)
 
@@ -67,13 +69,20 @@ on conflict (message_id) do nothing;`
 			if pending == 0 {
 				return
 			}
-			br := pool.SendBatch(ctx, batch)
+
+			// отдельный контекст с таймаутом, чтобы не зависнуть навечно на БД
+			dbCtx, cancel := context.WithTimeout(context.Background(), flushTimeout)
+			defer cancel()
+
+			br := pool.SendBatch(dbCtx, batch)
 			if err := br.Close(); err != nil {
 				log.Printf("batch flush error: %v", err)
-				// даже если ошибка, считаем эти строки обработанными логически
+				// при таймауте/ошибке считаем, что эти pending логически "обработаны"
 			}
+
 			totalInserted += uint64(pending)
 			intervalInserted += uint64(pending)
+
 			batch = &pgx.Batch{}
 			pending = 0
 		}
@@ -111,6 +120,9 @@ on conflict (message_id) do nothing;`
 	return in
 }
 
+// счётчик дропнутых сообщений, если очередь батчера переполнится
+var dropped uint64
+
 func main() {
 	// ---- env
 	username := mustEnv("TWITCH_USERNAME")
@@ -136,7 +148,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	// батчер
+	// ---- батчер
 	writer := startBatchWriter(ctx, pool)
 
 	// ---- twitch client
@@ -150,7 +162,7 @@ func main() {
 			sentAt = time.Now().UTC()
 		}
 
-		writer <- row{
+		r := row{
 			id:    ptr(m.ID),
 			ch:    ptr(strings.TrimPrefix(m.Channel, "#")),
 			uid:   ptr(m.User.ID),
@@ -164,10 +176,21 @@ func main() {
 			bits:   intPtr(m.Bits),
 			sentAt: sentAt,
 		}
+
+		// неблокирующая отправка: если очередь забита, дропаем и логируем
+		select {
+		case writer <- r:
+			// ок
+		default:
+			dropped++
+			if dropped%100 == 0 {
+				log.Printf("batch writer: channel full, dropped %d messages total", dropped)
+			}
+		}
 	})
 
 	client.OnConnect(func() {
-		log.Printf("connected. joining: %v", channels)
+		log.Printf("twitch: connected, joining channels: %v", channels)
 		for _, ch := range channels {
 			if ch == "" {
 				continue
@@ -177,7 +200,11 @@ func main() {
 	})
 
 	client.OnReconnectMessage(func(message twitch.ReconnectMessage) {
-		log.Printf("server asked to reconnect: %+v", message)
+		log.Printf("twitch: RECONNECT requested by server: %+v", message)
+	})
+
+	client.OnNoticeMessage(func(msg twitch.NoticeMessage) {
+		log.Printf("twitch NOTICE [%s]: %s", msg.MsgID, msg.Message)
 	})
 
 	// go-twitch-irc уже умеет автореконнект с бэкоффом
