@@ -59,6 +59,12 @@ go run app/main.go
 ```
 
 ### Сборка
+
+```bash
+## Деплой докера в разработке
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
 ```bash
 # Сборка бинарного файла
 CGO_ENABLED=0 go build -o app/app app/main.go
