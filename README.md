@@ -91,9 +91,10 @@ docker-compose.dev.yml# База данных + volume для разработк
 | `POSTGRES_PASSWORD` | Пароль пользователя | Да |
 
 ### Как получить Twitch OAuth токен для IRC
-1. Зайдите на https://twitchapps.com/tmi/ под нужным аккаунтом (создайте отдельный бот-аккаунт, если не хотите использовать
-   основной).
-2. Нажмите **Connect** → подтвердите права → скопируйте сгенерированную строку вида `oauth:xxxxxxxxxxxxxxxxxxxx`.
+1. Откройте https://twitchtokengenerator.com и выберите **Connect with Twitch** под нужным аккаунтом (лучше использовать
+   отдельный бот-аккаунт).
+2. После авторизации в разделе **TMI (Chat Bot)** нажмите **Generate Token** → подтвердите права → скопируйте строку вида
+   `oauth:xxxxxxxxxxxxxxxxxxxx`.
 3. Вставьте её в переменную `TWITCH_OAUTH_TOKEN` (в `.env` или окружении). Токен специфичен для IRC и не подходит для REST API.
 
 ## Что создаётся в базе
