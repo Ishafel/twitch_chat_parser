@@ -23,3 +23,16 @@ create or replace view v_last_messages as
 select *
 from chat_messages
 order by sent_at desc nulls last, id desc;
+
+create table if not exists channel_notices (
+  id          bigserial primary key,
+  channel     text not null,
+  msg_id      text,
+  message     text not null,
+  tags        jsonb not null default '{}',
+  notice_at   timestamptz,
+  received_at timestamptz not null default now()
+);
+
+create index if not exists idx_channel_notices_channel_time
+  on channel_notices (channel, notice_at desc nulls last, id desc);

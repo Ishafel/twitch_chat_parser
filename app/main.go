@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -34,10 +35,10 @@ const (
 
 type row struct {
 	id, ch, uid, uname, dname, txt, color *string
-	badges                                 []byte
-	isMod, isSub                           *bool
-	bits                                   *int
-	sentAt                                 time.Time
+	badges                                []byte
+	isMod, isSub                          *bool
+	bits                                  *int
+	sentAt                                time.Time
 }
 
 // батчер: собирает INSERT'ы в pgx.Batch и флашит пачкой,
@@ -163,12 +164,12 @@ func main() {
 		}
 
 		r := row{
-			id:    ptr(m.ID),
-			ch:    ptr(strings.TrimPrefix(m.Channel, "#")),
-			uid:   ptr(m.User.ID),
-			uname: ptr(m.User.Name),
-			dname: ptr(m.User.DisplayName),
-			txt:   ptr(m.Message),
+			id:     ptr(m.ID),
+			ch:     ptr(strings.TrimPrefix(m.Channel, "#")),
+			uid:    ptr(m.User.ID),
+			uname:  ptr(m.User.Name),
+			dname:  ptr(m.User.DisplayName),
+			txt:    ptr(m.Message),
 			badges: badgesJSON,
 			color:  ptr(m.User.Color),
 			isMod:  boolPtr(m.User.Badges["moderator"] > 0 || m.User.Badges["broadcaster"] > 0),
@@ -204,7 +205,12 @@ func main() {
 	})
 
 	client.OnNoticeMessage(func(msg twitch.NoticeMessage) {
-		log.Printf("twitch NOTICE [%s]: %s", msg.MsgID, msg.Message)
+		channel := normalizeChannel(msg.Channel)
+		log.Printf("twitch NOTICE #%s [%s]: %s", channel, msg.MsgID, msg.Message)
+
+		if err := saveNotice(ctx, pool, msg); err != nil {
+			log.Printf("twitch NOTICE save failed for #%s: %v", channel, err)
+		}
 	})
 
 	// go-twitch-irc уже умеет автореконнект с бэкоффом
@@ -220,7 +226,37 @@ func main() {
 	client.Disconnect()
 }
 
+func saveNotice(ctx context.Context, pool *pgxpool.Pool, msg twitch.NoticeMessage) error {
+	dbCtx, cancel := context.WithTimeout(ctx, flushTimeout)
+	defer cancel()
+
+	noticeAt := noticeTimestamp(msg.Tags)
+	tagsJSON, _ := json.Marshal(msg.Tags)
+
+	_, err := pool.Exec(dbCtx, `
+insert into channel_notices (
+  channel, msg_id, message, tags, notice_at
+) values ($1, $2, $3, $4, $5);
+`, normalizeChannel(msg.Channel), msg.MsgID, msg.Message, tagsJSON, noticeAt)
+
+	return err
+}
+
 // --- helpers ---
+
+func noticeTimestamp(tags map[string]string) time.Time {
+	if ts := tags["tmi-sent-ts"]; ts != "" {
+		if ms, err := strconv.ParseInt(ts, 10, 64); err == nil {
+			return time.UnixMilli(ms).UTC()
+		}
+	}
+
+	return time.Now().UTC()
+}
+
+func normalizeChannel(ch string) string {
+	return strings.TrimPrefix(strings.TrimSpace(ch), "#")
+}
 
 func splitAndTrim(s string) []string {
 	parts := strings.Split(s, ",")
