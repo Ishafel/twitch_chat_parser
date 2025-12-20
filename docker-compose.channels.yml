@@ -1,0 +1,21 @@
+x-app-base: &app-base
+  extends:
+    file: docker-compose.yml
+    service: app
+
+services:
+  app_main:
+    <<: *app-base
+    env_file:
+      - .env
+
+  app_extra1:
+    <<: *app-base
+    env_file:
+      - .env.extra1
+
+  # Добавляйте дополнительные сервисы по аналогии:
+  # app_third:
+  #   <<: *app-base
+  #   env_file:
+  #     - .env.third
