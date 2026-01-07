@@ -81,6 +81,25 @@ go mod tidy
 go run ./cmd/chat-logger
 ```
 
+## Получение OAuth токена приложения (twitch-auth)
+
+Утилита `twitch-auth` получает и сохраняет OAuth токен приложения в файл
+`.secrets/twitch_tokens.json`. При повторном запуске токен будет обновлён
+только при приближении срока истечения.
+
+```bash
+export TWITCH_CLIENT_ID=...        # Client ID приложения
+export TWITCH_CLIENT_SECRET=...    # Client Secret приложения
+
+cd app
+go run ./cmd/twitch-auth app
+```
+
+Пример вывода:
+```
+ok, expires at 2024-05-01T12:34:56Z
+```
+
 ## Архитектура и код
 - `app/config` — чтение/валидация переменных окружения, дефолтные настройки батчинга.
 - `app/model` — доменные модели сообщений и уведомлений.
