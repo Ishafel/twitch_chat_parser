@@ -108,6 +108,18 @@ ok, expires at 2024-05-01T12:34:56Z
 }
 ```
 
+### Получение app token внутри контейнера
+
+Runtime-образ использует distroless, поэтому команды нужно вызывать напрямую
+без shell. Бинарь `twitch-auth` включён в образ и доступен по пути `/app/twitch-auth`.
+
+```bash
+docker compose exec \
+  -e TWITCH_CLIENT_ID=... \
+  -e TWITCH_CLIENT_SECRET=... \
+  app /app/twitch-auth app
+```
+
 ### Пример получения app token вручную (curl)
 
 Если нужно получить токен без бинаря, можно сделать прямой запрос к

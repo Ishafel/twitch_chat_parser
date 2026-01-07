@@ -17,10 +17,12 @@ RUN cd app && go mod tidy
 # Сборка (на M4 не фиксируем GOARCH!)
 WORKDIR /src/app
 RUN CGO_ENABLED=0 go build -o /out/app ./cmd/chat-logger
+RUN CGO_ENABLED=0 go build -o /out/twitch-auth ./cmd/twitch-auth
 
 # ---------- runtime ----------
 FROM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /app
 COPY --from=build /out/app /app/app
+COPY --from=build /out/twitch-auth /app/twitch-auth
 USER nonroot:nonroot
 ENTRYPOINT ["/app/app"]
