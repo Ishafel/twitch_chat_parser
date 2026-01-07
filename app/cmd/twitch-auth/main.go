@@ -39,9 +39,5 @@ func main() {
 		log.Fatalf("get app token: %v", err)
 	}
 
-	if err := store.SaveAppToken(token); err != nil {
-		log.Fatalf("save app token: %v", err)
-	}
-
 	fmt.Printf("ok, expires at %s\n", token.ExpiresAt.Format(time.RFC3339))
 }
