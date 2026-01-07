@@ -73,6 +73,9 @@ func (store FileTokenStore) SaveAppToken(token Token) error {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("save app token: write file: %w", err)
 	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("save app token: chmod file: %w", err)
+	}
 
 	return nil
 }
