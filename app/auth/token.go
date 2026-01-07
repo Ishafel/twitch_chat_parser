@@ -10,7 +10,10 @@ import (
 	"time"
 )
 
-const twitchOAuthTokenURL = "https://id.twitch.tv/oauth2/token"
+const (
+	twitchOAuthTokenURL = "https://id.twitch.tv/oauth2/token"
+	oauthRequestTimeout = 10 * time.Second
+)
 
 // GetAppToken запрашивает OAuth токен приложения у Twitch.
 func GetAppToken(clientID, clientSecret string) (accessToken string, expiresIn time.Duration, err error) {
@@ -25,7 +28,8 @@ func GetAppToken(clientID, clientSecret string) (accessToken string, expiresIn t
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: oauthRequestTimeout}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", 0, fmt.Errorf("twitch oauth: request failed: %w", err)
 	}
