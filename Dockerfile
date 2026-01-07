@@ -16,7 +16,7 @@ RUN cd app && go mod tidy
 
 # Сборка (на M4 не фиксируем GOARCH!)
 WORKDIR /src/app
-RUN CGO_ENABLED=0 go build -o /out/app
+RUN CGO_ENABLED=0 go build -o /out/app ./cmd/chat-logger
 
 # ---------- runtime ----------
 FROM gcr.io/distroless/base-debian12:nonroot
