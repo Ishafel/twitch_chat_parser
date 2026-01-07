@@ -83,9 +83,9 @@ go run ./cmd/chat-logger
 
 ## Получение OAuth токена приложения (twitch-auth)
 
-Утилита `twitch-auth` получает и сохраняет OAuth токен приложения в файл
-`.secrets/twitch_tokens.json`. При повторном запуске токен будет обновлён
-только при приближении срока истечения.
+Утилита `twitch-auth` получает и сохраняет OAuth токен приложения (grant
+`client_credentials`) в файл `.secrets/twitch_tokens.json`. При повторном
+запуске токен будет обновлён только при приближении срока истечения.
 
 ```bash
 export TWITCH_CLIENT_ID=...        # Client ID приложения
@@ -100,13 +100,47 @@ go run ./cmd/twitch-auth app
 ok, expires at 2024-05-01T12:34:56Z
 ```
 
+Пример содержимого `.secrets/twitch_tokens.json`:
+```json
+{
+  "access": "app_access_token",
+  "expires_at": "2024-05-01T12:34:56Z"
+}
+```
+
+### Пример получения app token вручную (curl)
+
+Если нужно получить токен без бинаря, можно сделать прямой запрос к
+OAuth endpoint Twitch:
+
+```bash
+curl -X POST "https://id.twitch.tv/oauth2/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id=$TWITCH_CLIENT_ID" \
+  -d "client_secret=$TWITCH_CLIENT_SECRET" \
+  -d "grant_type=client_credentials"
+```
+
+Ответ будет содержать `access_token` и `expires_in` (секунды).
+
+### Пример запроса Helix с app token
+
+```bash
+curl -X GET "https://api.twitch.tv/helix/streams?user_login=twitch" \
+  -H "Client-Id: $TWITCH_CLIENT_ID" \
+  -H "Authorization: Bearer $APP_ACCESS_TOKEN"
+```
+
 ## Архитектура и код
 - `app/config` — чтение/валидация переменных окружения, дефолтные настройки батчинга.
 - `app/model` — доменные модели сообщений и уведомлений.
 - `app/storage` — интерфейсы работы с PostgreSQL: батчер для `chat_messages` и сохранение `NOTICE`.
 - `app/twitch` — обёртка над `go-twitch-irc` с подпиской на события и преобразованием в доменные модели.
+- `app/auth` — получение app access token через HTTP (client_credentials).
+- `app/tokens` — хранение app access token в файле и менеджер обновления.
 - `app/service` — оркестрация: маршрутизация событий в хранилище и управление клиентом.
 - `app/cmd/chat-logger/main.go` — только сборка конфигурации, создание зависимостей и запуск сервиса.
+- `app/cmd/twitch-auth/main.go` — CLI для получения app access token.
 
 Структура репозитория:
 ```
